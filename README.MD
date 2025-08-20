@@ -8,5 +8,5 @@ playwright install chromium
 
 ## run
 ```
-python simple_smb_server.py
+python http_server.py
 ```
