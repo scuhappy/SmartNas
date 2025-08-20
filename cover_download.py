@@ -11,7 +11,7 @@ BASE_URL = "https://javday.app"
 
 async def search_javday(fanhao: str):
     """使用 Playwright 访问 javday 搜索并解析结果"""
-    url = f"{BASE_URL}/search?wd={quote(fanhao)}"
+    url = f"{BASE_URL}/search?wd={quote(fanhao)}"  # 修复 fze 错误
     results = []
 
     async with async_playwright() as p:
@@ -62,6 +62,11 @@ async def download_cover(url, fanhao, filename, save_dir="covers", retries=3):
     save_name = os.path.splitext(filename)[0]
     save_path = os.path.join(save_dir, f"{save_name}.jpg")
 
+    # 检查封面是否已存在
+    if os.path.exists(save_path):
+        print(f"✅ {fanhao} 封面已存在: {save_path}")
+        return save_path
+
     # 尝试使用 Playwright 下载
     for attempt in range(retries):
         try:
@@ -90,8 +95,10 @@ async def download_cover(url, fanhao, filename, save_dir="covers", retries=3):
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Referer": "https://javday.app/",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept": "image/avif,image/webp,image/*,*/*;q=0.8",
         }
-        response = requests.get(url, headers=headers, timeout=15, verify=False)
+        response = requests.get(url, headers=headers, timeout=30, verify=False)
         response.raise_for_status()
         with open(save_path, "wb") as f:
             f.write(response.content)
@@ -115,12 +122,19 @@ def get_relative_path(path, base_path):
         print(f"⚠ 跨分区路径: {path} (基于 {base_path})")
         return os.path.abspath(path).replace(os.sep, '/')
 
+def load_existing_metadata(json_file):
+    """加载现有的 metadata.json 文件"""
+    try:
+        with open(json_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
 async def process_videos(folder_path, json_file="metadata.json"):
     """递归遍历文件夹及其子文件夹，提取番号，下载封面并保存元数据"""
     video_extensions = ('.mp4', '.mkv', '.avi', '.mov', '.wmv')
-    metadata = {}
-
-    # 使用 folder_path 作为基准路径
+    metadata = load_existing_metadata(json_file)
+    record_count = 0
     base_path = os.path.abspath(folder_path)
 
     for root, _, files in os.walk(folder_path):
@@ -132,8 +146,12 @@ async def process_videos(folder_path, json_file="metadata.json"):
                     continue
 
                 print(f"处理文件: {os.path.join(root, filename)} (番号: {fanhao})")
-                items = await search_javday(fanhao)
+                # 跳过已存在于 metadata 的番号
+                if fanhao in metadata:
+                    print(f"✅ {fanhao} 已存在于元数据，跳过")
+                    continue
 
+                items = await search_javday(fanhao)
                 if not items:
                     print(f"⚠ {fanhao} 没有找到结果")
                     continue
@@ -150,11 +168,20 @@ async def process_videos(folder_path, json_file="metadata.json"):
                         "cover_path": relative_cover_path,
                         "video_file": relative_video_path
                     }
+                    record_count += 1
 
-    # 保存元数据到 JSON 文件
-    with open(json_file, "w", encoding="utf-8") as f:
-        json.dump(metadata, f, ensure_ascii=False, indent=4)
-    print(f"✅ 元数据已保存至: {json_file}")
+                    # 每 10 条记录写入一次
+                    if record_count >= 10:
+                        with open(json_file, "w", encoding="utf-8") as f:
+                            json.dump(metadata, f, ensure_ascii=False, indent=4)
+                        print(f"📝 已保存 {record_count} 条元数据至: {json_file}")
+                        record_count = 0
+
+    # 保存剩余的元数据
+    if record_count > 0:
+        with open(json_file, "w", encoding="utf-8") as f:
+            json.dump(metadata, f, ensure_ascii=False, indent=4)
+        print(f"📝 最终保存 {record_count} 条元数据至: {json_file}")
 
 async def main():
     # 指定视频文件夹路径
