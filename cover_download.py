@@ -11,7 +11,7 @@ BASE_URL = "https://javday.app"
 
 async def search_javday(fanhao: str):
     """使用 Playwright 访问 javday 搜索并解析结果"""
-    url = f"{BASE_URL}/search?wd={quote(fanhao)}"  # 修复 fze 错误
+    url = f"{BASE_URL}/search?wd={quote(fanhao)}"
     results = []
 
     async with async_playwright() as p:
@@ -113,22 +113,14 @@ def extract_fanhao(filename):
     match = re.search(r"[A-Z]{2,5}-\d{2,5}", filename, re.I)
     return match.group(0).upper() if match else None
 
-def get_relative_path(path, base_path):
-    """计算相对路径，处理跨分区情况"""
+def get_relative_cover_path(cover_path, base_path):
+    """计算封面相对于脚本运行目录的路径"""
     try:
-        return os.path.relpath(path, base_path).replace(os.sep, '/')
+        return os.path.relpath(cover_path, os.getcwd()).replace(os.sep, '/')
     except ValueError:
         # 跨分区时，使用绝对路径并规范化
-        print(f"⚠ 跨分区路径: {path} (基于 {base_path})")
-        return os.path.abspath(path).replace(os.sep, '/')
-
-def load_existing_metadata(json_file):
-    """加载现有的 metadata.json 文件"""
-    try:
-        with open(json_file, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+        print(f"⚠ 跨分区路径: {cover_path} (基于 {base_path})")
+        return os.path.abspath(cover_path).replace(os.sep, '/')
 
 async def process_videos(folder_path, json_file="metadata.json"):
     """递归遍历文件夹及其子文件夹，提取番号，下载封面并保存元数据"""
@@ -160,13 +152,14 @@ async def process_videos(folder_path, json_file="metadata.json"):
                 item = items[0]
                 cover_path = await download_cover(item["cover"], fanhao, filename)
                 if cover_path:
-                    # 计算相对于 folder_path 的路径
-                    relative_cover_path = get_relative_path(cover_path, base_path)
-                    relative_video_path = get_relative_path(os.path.join(root, filename), base_path)
+                    # 封面路径：相对于脚本运行目录
+                    relative_cover_path = get_relative_cover_path(cover_path, base_path)
+                    # 视频路径：绝对路径，规范化斜杠
+                    absolute_video_path = os.path.abspath(os.path.join(root, filename)).replace(os.sep, '/')
                     metadata[fanhao] = {
                         "title": item["title"],
                         "cover_path": relative_cover_path,
-                        "video_file": relative_video_path
+                        "video_file": absolute_video_path
                     }
                     record_count += 1
 
@@ -182,6 +175,14 @@ async def process_videos(folder_path, json_file="metadata.json"):
         with open(json_file, "w", encoding="utf-8") as f:
             json.dump(metadata, f, ensure_ascii=False, indent=4)
         print(f"📝 最终保存 {record_count} 条元数据至: {json_file}")
+
+def load_existing_metadata(json_file):
+    """加载现有的 metadata.json 文件"""
+    try:
+        with open(json_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
 
 async def main():
     # 指定视频文件夹路径
