@@ -2,6 +2,7 @@ import os
 import re
 import json
 import asyncio
+import requests
 from urllib.parse import quote
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
@@ -22,13 +23,15 @@ async def search_javday(fanhao: str):
                 "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
                 "Referer": "https://javday.app/",
                 "Connection": "keep-alive",
-            }
+            },
+            ignore_https_errors=True
         )
         page = await context.new_page()
 
         try:
-            await page.goto(url, wait_until="domcontentloaded", timeout=20000)
-            await page.wait_for_selector(".videoBox", timeout=10000)
+            print(f"🔍 搜索 {fanhao}: {url}")
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_selector(".videoBox", timeout=15000)
             content = await page.content()
 
             soup = BeautifulSoup(content, "html.parser")
@@ -53,26 +56,49 @@ async def search_javday(fanhao: str):
 
     return results
 
-async def download_cover(url, fanhao, filename, save_dir="covers"):
-    """下载封面并以视频文件名命名"""
+async def download_cover(url, fanhao, filename, save_dir="covers", retries=3):
+    """下载封面并以视频文件名命名，支持重试和备用下载"""
     os.makedirs(save_dir, exist_ok=True)
     save_name = os.path.splitext(filename)[0]
     save_path = os.path.join(save_dir, f"{save_name}.jpg")
 
+    # 尝试使用 Playwright 下载
+    for attempt in range(retries):
+        try:
+            print(f"📥 尝试下载 {fanhao} 封面 (第 {attempt + 1}/{retries}): {url}")
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context(ignore_https_errors=True)
+                page = await context.new_page()
+                response = await page.goto(url, wait_until="networkidle", timeout=30000)
+                if response and response.status == 200:
+                    content = await response.body()
+                    with open(save_path, "wb") as f:
+                        f.write(content)
+                    await browser.close()
+                    print(f"✅ {fanhao} 封面已保存: {save_path}")
+                    return save_path
+                else:
+                    print(f"⚠ {fanhao} 封面下载失败，状态码: {response.status if response else '无响应'}")
+                    await browser.close()
+        except Exception as e:
+            print(f"❌ {fanhao} 封面下载失败 (第 {attempt + 1}/{retries}): {e}")
+
+    # 备用下载：使用 requests
+    print(f"🔄 尝试使用 requests 下载 {fanhao} 封面: {url}")
     try:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
-            context = await browser.new_context()
-            page = await context.new_page()
-            response = await page.goto(url, wait_until="networkidle", timeout=15000)
-            content = await response.body()
-            with open(save_path, "wb") as f:
-                f.write(content)
-            await browser.close()
-            print(f"✅ {fanhao} 封面已保存: {save_path}")
-            return save_path
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://javday.app/",
+        }
+        response = requests.get(url, headers=headers, timeout=15, verify=False)
+        response.raise_for_status()
+        with open(save_path, "wb") as f:
+            f.write(response.content)
+        print(f"✅ {fanhao} 封面已保存 (requests): {save_path}")
+        return save_path
     except Exception as e:
-        print(f"❌ 下载 {fanhao} 封面失败: {e}")
+        print(f"❌ {fanhao} 封面下载失败 (requests): {e}")
         return None
 
 def extract_fanhao(filename):
@@ -80,12 +106,23 @@ def extract_fanhao(filename):
     match = re.search(r"[A-Z]{2,5}-\d{2,5}", filename, re.I)
     return match.group(0).upper() if match else None
 
+def get_relative_path(path, base_path):
+    """计算相对路径，处理跨分区情况"""
+    try:
+        return os.path.relpath(path, base_path).replace(os.sep, '/')
+    except ValueError:
+        # 跨分区时，使用绝对路径并规范化
+        print(f"⚠ 跨分区路径: {path} (基于 {base_path})")
+        return os.path.abspath(path).replace(os.sep, '/')
+
 async def process_videos(folder_path, json_file="metadata.json"):
     """递归遍历文件夹及其子文件夹，提取番号，下载封面并保存元数据"""
     video_extensions = ('.mp4', '.mkv', '.avi', '.mov', '.wmv')
     metadata = {}
 
-    # 递归遍历文件夹
+    # 使用 folder_path 作为基准路径
+    base_path = os.path.abspath(folder_path)
+
     for root, _, files in os.walk(folder_path):
         for filename in files:
             if filename.lower().endswith(video_extensions):
@@ -105,10 +142,13 @@ async def process_videos(folder_path, json_file="metadata.json"):
                 item = items[0]
                 cover_path = await download_cover(item["cover"], fanhao, filename)
                 if cover_path:
+                    # 计算相对于 folder_path 的路径
+                    relative_cover_path = get_relative_path(cover_path, base_path)
+                    relative_video_path = get_relative_path(os.path.join(root, filename), base_path)
                     metadata[fanhao] = {
                         "title": item["title"],
-                        "cover_path": cover_path,
-                        "video_file": os.path.join(root, filename)
+                        "cover_path": relative_cover_path,
+                        "video_file": relative_video_path
                     }
 
     # 保存元数据到 JSON 文件
@@ -118,7 +158,7 @@ async def process_videos(folder_path, json_file="metadata.json"):
 
 async def main():
     # 指定视频文件夹路径
-    folder_path = "G:\Videos"  # 请替换为你的视频文件夹路径
+    folder_path = "G:/Videos"  # 请替换为你的视频文件夹路径
     if not os.path.exists(folder_path):
         print(f"❌ 文件夹 {folder_path} 不存在")
         return
