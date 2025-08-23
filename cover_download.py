@@ -186,7 +186,7 @@ def load_existing_metadata(json_file):
 
 async def main():
     # 指定视频文件夹路径
-    folder_path = "G:/Videos"  # 请替换为你的视频文件夹路径
+    folder_path = "/media"  # 请替换为你的视频文件夹路径
     if not os.path.exists(folder_path):
         print(f"❌ 文件夹 {folder_path} 不存在")
         return
