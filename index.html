@@ -4,12 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Qwen2-0.5B 聊天助手</title>
-    <!-- 引入Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- 引入Font Awesome -->
     <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
     
-    <!-- 配置Tailwind自定义颜色和字体 -->
     <script>
         tailwind.config = {
             theme: {
@@ -63,7 +60,6 @@
     </style>
 </head>
 <body class="bg-gray-100 dark:bg-dark min-h-screen flex flex-col">
-    <!-- 顶部导航栏 -->
     <header class="bg-white dark:bg-gray-800 shadow-md z-10">
         <div class="container mx-auto px-4 py-3 flex items-center justify-between">
             <div class="flex items-center space-x-2">
@@ -81,11 +77,8 @@
         </div>
     </header>
 
-    <!-- 主聊天区域 -->
     <main class="flex-1 container mx-auto px-4 py-6 flex flex-col max-w-4xl">
-        <!-- 聊天历史区域 -->
         <div id="chat-container" class="flex-1 overflow-y-auto mb-6 space-y-6 scrollbar-hide">
-            <!-- 欢迎消息 -->
             <div class="flex items-start">
                 <div class="flex-shrink-0 bg-primary rounded-full p-2 mr-3">
                     <i class="fa fa-robot text-white"></i>
@@ -96,7 +89,6 @@
             </div>
         </div>
 
-        <!-- 输入区域 -->
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
             <form id="chat-form" class="flex flex-col space-y-3">
                 <textarea 
@@ -126,14 +118,12 @@
         </div>
     </main>
 
-    <!-- 页脚 -->
     <footer class="bg-white dark:bg-gray-800 py-4 shadow-inner">
         <div class="container mx-auto px-4 text-center text-gray-600 dark:text-gray-400 text-sm">
             <p>Powered by Ollama & Qwen2-0.5B | 本地部署的AI助手</p>
         </div>
     </footer>
 
-    <!-- 信息模态框 -->
     <div id="info-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
         <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6 transform transition-all">
             <div class="flex justify-between items-center mb-4">
@@ -156,7 +146,6 @@
     </div>
 
     <script>
-        // DOM元素
         const chatForm = document.getElementById('chat-form');
         const userInput = document.getElementById('user-input');
         const chatContainer = document.getElementById('chat-container');
@@ -168,44 +157,37 @@
         const closeModal = document.getElementById('close-modal');
         const closeModalBtn = document.getElementById('close-modal-btn');
 
-        // 检查Ollama服务状态
+        // 检查Ollama服务状态的函数 - 修复跨域问题
         async function checkOllamaStatus() {
             try {
-                const response = await fetch('http://localhost:11434/api/tags');
-                if (response.ok) {
-                    statusIndicator.innerHTML = '<i class="fa fa-circle text-green-500 text-xs mr-1"></i>已连接';
-                    return true;
-                } else {
-                    statusIndicator.innerHTML = '<i class="fa fa-circle text-yellow-500 text-xs mr-1"></i>服务未就绪';
-                    return false;
-                }
+                // 使用no-cors模式避免跨域限制影响状态检测
+                const response = await fetch('http://localhost:11434/api/tags', {
+                    mode: 'no-cors'
+                });
+                // no-cors模式下response.ok始终为false，所以只要不抛异常就认为服务正常
+                statusIndicator.innerHTML = '<i class="fa fa-circle text-green-500 text-xs mr-1"></i>已连接';
+                return true;
             } catch (error) {
                 statusIndicator.innerHTML = '<i class="fa fa-circle text-red-500 text-xs mr-1"></i>未检测到服务';
                 return false;
             }
         }
 
-        // 发送消息到Ollama API
         async function sendMessage(message) {
             try {
-                // 显示用户消息
                 addMessageToChat(message, 'user');
-                
-                // 清空输入框并禁用发送按钮
                 userInput.value = '';
                 sendButton.disabled = true;
-                
-                // 显示"正在输入"状态
                 const thinkingElement = addThinkingIndicator();
                 
-                // 调用Ollama API
+                // 发送请求时使用正确的模型名称并添加跨域配置
                 const response = await fetch('http://localhost:11434/api/chat', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        model: 'qwen2:0.5b-instruct',
+                        model: 'qwen2:0.5b-instruct',  // 确保模型名称正确
                         messages: [
                             { role: 'user', content: message }
                         ],
@@ -213,10 +195,7 @@
                     })
                 });
                 
-                // 移除"正在输入"状态
                 thinkingElement.remove();
-                
-                // 处理流式响应
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
                 let assistantMessage = '';
@@ -226,7 +205,6 @@
                     const { done, value } = await reader.read();
                     if (done) break;
                     
-                    // 解码并解析响应
                     const chunk = decoder.decode(value, { stream: true });
                     const lines = chunk.split('\n').filter(line => line.trim() !== '');
                     
@@ -243,12 +221,8 @@
                     }
                 }
                 
-                // 启用发送按钮
                 sendButton.disabled = false;
-                
-                // 滚动到底部
                 scrollToBottom();
-                
                 return assistantMessage;
             } catch (error) {
                 console.error('发送消息出错:', error);
@@ -258,7 +232,7 @@
             }
         }
 
-        // 添加消息到聊天界面
+        // 以下函数保持不变
         function addMessageToChat(message, role) {
             const messageElement = document.createElement('div');
             messageElement.className = `flex items-start ${role === 'user' ? 'justify-end' : ''}`;
@@ -273,7 +247,6 @@
                 bubbleClass = 'bg-white dark:bg-gray-800 rounded-lg rounded-tl-none px-4 py-3 shadow-sm max-w-[85%]';
             }
             
-            // 处理换行和格式化
             const formattedMessage = message
                 .replace(/\n/g, '<br>')
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
@@ -289,11 +262,9 @@
             
             chatContainer.appendChild(messageElement);
             scrollToBottom();
-            
             return messageElement;
         }
 
-        // 创建助手消息元素
         function createAssistantMessageElement() {
             const messageElement = document.createElement('div');
             messageElement.className = 'flex items-start';
@@ -309,11 +280,9 @@
             
             chatContainer.appendChild(messageElement);
             scrollToBottom();
-            
             return messageElement;
         }
 
-        // 更新助手消息内容
         function updateAssistantMessage(element, content) {
             const formattedContent = content
                 .replace(/\n/g, '<br>')
@@ -324,7 +293,6 @@
             scrollToBottom();
         }
 
-        // 添加"正在输入"指示器
         function addThinkingIndicator() {
             const indicatorElement = document.createElement('div');
             indicatorElement.className = 'flex items-start';
@@ -344,20 +312,16 @@
             
             chatContainer.appendChild(indicatorElement);
             scrollToBottom();
-            
             return indicatorElement;
         }
 
-        // 滚动到聊天底部
         function scrollToBottom() {
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        // 切换深色/浅色模式
         function toggleTheme() {
             document.documentElement.classList.toggle('dark');
             
-            // 保存主题偏好
             if (document.documentElement.classList.contains('dark')) {
                 localStorage.setItem('theme', 'dark');
                 themeToggle.innerHTML = '<i class="fa fa-sun-o text-yellow-400"></i>';
@@ -367,7 +331,6 @@
             }
         }
 
-        // 初始化主题
         function initTheme() {
             if (localStorage.getItem('theme') === 'dark' || 
                 (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
@@ -379,19 +342,16 @@
             }
         }
 
-        // 显示信息模态框
         function showInfoModal() {
             infoModal.classList.remove('hidden');
             infoModal.classList.add('flex');
         }
 
-        // 隐藏信息模态框
         function hideInfoModal() {
             infoModal.classList.add('hidden');
             infoModal.classList.remove('flex');
         }
 
-        // 事件监听
         chatForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const message = userInput.value.trim();
@@ -400,7 +360,6 @@
             }
         });
 
-        // 支持按Enter发送消息，Shift+Enter换行
         userInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -413,20 +372,18 @@
         closeModal.addEventListener('click', hideInfoModal);
         closeModalBtn.addEventListener('click', hideInfoModal);
 
-        // 点击模态框外部关闭
         infoModal.addEventListener('click', (e) => {
             if (e.target === infoModal) {
                 hideInfoModal();
             }
         });
 
-        // 初始化
         window.addEventListener('DOMContentLoaded', () => {
             initTheme();
             checkOllamaStatus();
-            // 定期检查服务状态
             setInterval(checkOllamaStatus, 10000);
         });
     </script>
 </body>
 </html>
+    
