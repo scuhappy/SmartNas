@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwen2-0.5B 聊天助手</title>
+    <!-- 引入Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入Font Awesome -->
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    
+    <!-- 配置Tailwind自定义颜色和字体 -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        dark: '#1E293B',
+                        light: '#F8FAFC'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .scrollbar-hide {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+            }
+            .scrollbar-hide::-webkit-scrollbar {
+                display: none;
+            }
+            .typing-indicator {
+                display: inline-flex;
+                align-items: center;
+                gap: 0.25rem;
+            }
+            .typing-indicator span {
+                height: 0.5rem;
+                width: 0.5rem;
+                background-color: #94a3b8;
+                border-radius: 50%;
+                display: block;
+                animation: typing 1.4s infinite ease-in-out both;
+            }
+            .typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+            .typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+            @keyframes typing {
+                0%, 80%, 100% { transform: scale(0); }
+                40% { transform: scale(1); }
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 dark:bg-dark min-h-screen flex flex-col">
+    <!-- 顶部导航栏 -->
+    <header class="bg-white dark:bg-gray-800 shadow-md z-10">
+        <div class="container mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-comments text-primary text-2xl"></i>
+                <h1 class="text-xl font-bold text-gray-800 dark:text-white">Qwen2-0.5B 聊天助手</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                    <i class="fa fa-moon-o text-gray-600 dark:text-gray-300"></i>
+                </button>
+                <button id="info-button" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">
+                    <i class="fa fa-info-circle text-gray-600 dark:text-gray-300"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主聊天区域 -->
+    <main class="flex-1 container mx-auto px-4 py-6 flex flex-col max-w-4xl">
+        <!-- 聊天历史区域 -->
+        <div id="chat-container" class="flex-1 overflow-y-auto mb-6 space-y-6 scrollbar-hide">
+            <!-- 欢迎消息 -->
+            <div class="flex items-start">
+                <div class="flex-shrink-0 bg-primary rounded-full p-2 mr-3">
+                    <i class="fa fa-robot text-white"></i>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg rounded-tl-none px-4 py-3 shadow-sm max-w-[85%]">
+                    <p class="text-gray-800 dark:text-gray-200">你好！我是基于Qwen2-0.5B的聊天助手。有什么我可以帮助你的吗？</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 输入区域 -->
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
+            <form id="chat-form" class="flex flex-col space-y-3">
+                <textarea 
+                    id="user-input" 
+                    placeholder="请输入你的问题..." 
+                    class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary resize-none transition-all"
+                    rows="3"
+                    required
+                ></textarea>
+                <div class="flex justify-between items-center">
+                    <div class="text-sm text-gray-500 dark:text-gray-400">
+                        <span id="status-indicator" class="flex items-center">
+                            <i class="fa fa-circle text-green-500 text-xs mr-1"></i>
+                            已连接
+                        </span>
+                    </div>
+                    <button 
+                        type="submit" 
+                        class="bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-lg flex items-center space-x-2 transition-all transform hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+                        id="send-button"
+                    >
+                        <span>发送</span>
+                        <i class="fa fa-paper-plane"></i>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <!-- 页脚 -->
+    <footer class="bg-white dark:bg-gray-800 py-4 shadow-inner">
+        <div class="container mx-auto px-4 text-center text-gray-600 dark:text-gray-400 text-sm">
+            <p>Powered by Ollama & Qwen2-0.5B | 本地部署的AI助手</p>
+        </div>
+    </footer>
+
+    <!-- 信息模态框 -->
+    <div id="info-modal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center hidden">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6 transform transition-all">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold text-gray-800 dark:text-white">关于本助手</h3>
+                <button id="close-modal" class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+                    <i class="fa fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="space-y-3 text-gray-700 dark:text-gray-300">
+                <p>这是一个基于Ollama和Qwen2-0.5B模型的本地聊天助手。</p>
+                <p>所有对话均在本地处理，不会上传到云端，保护你的隐私。</p>
+                <p>Qwen2-0.5B是一个轻量级大语言模型，适合在资源有限的设备上运行。</p>
+            </div>
+            <div class="mt-6">
+                <button id="close-modal-btn" class="w-full bg-primary hover:bg-primary/90 text-white py-2 rounded-lg transition-colors">
+                    我知道了
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // DOM元素
+        const chatForm = document.getElementById('chat-form');
+        const userInput = document.getElementById('user-input');
+        const chatContainer = document.getElementById('chat-container');
+        const sendButton = document.getElementById('send-button');
+        const statusIndicator = document.getElementById('status-indicator');
+        const themeToggle = document.getElementById('theme-toggle');
+        const infoButton = document.getElementById('info-button');
+        const infoModal = document.getElementById('info-modal');
+        const closeModal = document.getElementById('close-modal');
+        const closeModalBtn = document.getElementById('close-modal-btn');
+
+        // 检查Ollama服务状态
+        async function checkOllamaStatus() {
+            try {
+                const response = await fetch('http://localhost:11434/api/tags');
+                if (response.ok) {
+                    statusIndicator.innerHTML = '<i class="fa fa-circle text-green-500 text-xs mr-1"></i>已连接';
+                    return true;
+                } else {
+                    statusIndicator.innerHTML = '<i class="fa fa-circle text-yellow-500 text-xs mr-1"></i>服务未就绪';
+                    return false;
+                }
+            } catch (error) {
+                statusIndicator.innerHTML = '<i class="fa fa-circle text-red-500 text-xs mr-1"></i>未检测到服务';
+                return false;
+            }
+        }
+
+        // 发送消息到Ollama API
+        async function sendMessage(message) {
+            try {
+                // 显示用户消息
+                addMessageToChat(message, 'user');
+                
+                // 清空输入框并禁用发送按钮
+                userInput.value = '';
+                sendButton.disabled = true;
+                
+                // 显示"正在输入"状态
+                const thinkingElement = addThinkingIndicator();
+                
+                // 调用Ollama API
+                const response = await fetch('http://localhost:11434/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        model: 'qwen2:0.5b',
+                        messages: [
+                            { role: 'user', content: message }
+                        ],
+                        stream: true
+                    })
+                });
+                
+                // 移除"正在输入"状态
+                thinkingElement.remove();
+                
+                // 处理流式响应
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let assistantMessage = '';
+                const assistantElement = createAssistantMessageElement();
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    
+                    // 解码并解析响应
+                    const chunk = decoder.decode(value, { stream: true });
+                    const lines = chunk.split('\n').filter(line => line.trim() !== '');
+                    
+                    for (const line of lines) {
+                        try {
+                            const data = JSON.parse(line);
+                            if (data.message && data.message.content) {
+                                assistantMessage += data.message.content;
+                                updateAssistantMessage(assistantElement, assistantMessage);
+                            }
+                        } catch (e) {
+                            console.error('解析响应出错:', e);
+                        }
+                    }
+                }
+                
+                // 启用发送按钮
+                sendButton.disabled = false;
+                
+                // 滚动到底部
+                scrollToBottom();
+                
+                return assistantMessage;
+            } catch (error) {
+                console.error('发送消息出错:', error);
+                addMessageToChat('抱歉，发送消息时出错了。请检查Ollama服务是否正在运行。', 'assistant');
+                sendButton.disabled = false;
+                return null;
+            }
+        }
+
+        // 添加消息到聊天界面
+        function addMessageToChat(message, role) {
+            const messageElement = document.createElement('div');
+            messageElement.className = `flex items-start ${role === 'user' ? 'justify-end' : ''}`;
+            
+            let avatar, bubbleClass;
+            
+            if (role === 'user') {
+                avatar = '<div class="flex-shrink-0 bg-gray-300 dark:bg-gray-600 rounded-full p-2 ml-3"><i class="fa fa-user text-gray-700 dark:text-gray-300"></i></div>';
+                bubbleClass = 'bg-primary text-white rounded-lg rounded-tr-none px-4 py-3 shadow-sm max-w-[85%]';
+            } else {
+                avatar = '<div class="flex-shrink-0 bg-primary rounded-full p-2 mr-3"><i class="fa fa-robot text-white"></i></div>';
+                bubbleClass = 'bg-white dark:bg-gray-800 rounded-lg rounded-tl-none px-4 py-3 shadow-sm max-w-[85%]';
+            }
+            
+            // 处理换行和格式化
+            const formattedMessage = message
+                .replace(/\n/g, '<br>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>');
+            
+            messageElement.innerHTML = `
+                ${role === 'assistant' ? avatar : ''}
+                <div class="${bubbleClass}">
+                    <p class="${role === 'user' ? '' : 'text-gray-800 dark:text-gray-200'}">${formattedMessage}</p>
+                </div>
+                ${role === 'user' ? avatar : ''}
+            `;
+            
+            chatContainer.appendChild(messageElement);
+            scrollToBottom();
+            
+            return messageElement;
+        }
+
+        // 创建助手消息元素
+        function createAssistantMessageElement() {
+            const messageElement = document.createElement('div');
+            messageElement.className = 'flex items-start';
+            
+            messageElement.innerHTML = `
+                <div class="flex-shrink-0 bg-primary rounded-full p-2 mr-3">
+                    <i class="fa fa-robot text-white"></i>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg rounded-tl-none px-4 py-3 shadow-sm max-w-[85%]">
+                    <p class="text-gray-800 dark:text-gray-200 assistant-message"></p>
+                </div>
+            `;
+            
+            chatContainer.appendChild(messageElement);
+            scrollToBottom();
+            
+            return messageElement;
+        }
+
+        // 更新助手消息内容
+        function updateAssistantMessage(element, content) {
+            const formattedContent = content
+                .replace(/\n/g, '<br>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/\*(.*?)\*/g, '<em>$1</em>');
+                
+            element.querySelector('.assistant-message').innerHTML = formattedContent;
+            scrollToBottom();
+        }
+
+        // 添加"正在输入"指示器
+        function addThinkingIndicator() {
+            const indicatorElement = document.createElement('div');
+            indicatorElement.className = 'flex items-start';
+            
+            indicatorElement.innerHTML = `
+                <div class="flex-shrink-0 bg-primary rounded-full p-2 mr-3">
+                    <i class="fa fa-robot text-white"></i>
+                </div>
+                <div class="bg-white dark:bg-gray-800 rounded-lg rounded-tl-none px-4 py-3 shadow-sm max-w-[85%]">
+                    <div class="typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            `;
+            
+            chatContainer.appendChild(indicatorElement);
+            scrollToBottom();
+            
+            return indicatorElement;
+        }
+
+        // 滚动到聊天底部
+        function scrollToBottom() {
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        // 切换深色/浅色模式
+        function toggleTheme() {
+            document.documentElement.classList.toggle('dark');
+            
+            // 保存主题偏好
+            if (document.documentElement.classList.contains('dark')) {
+                localStorage.setItem('theme', 'dark');
+                themeToggle.innerHTML = '<i class="fa fa-sun-o text-yellow-400"></i>';
+            } else {
+                localStorage.setItem('theme', 'light');
+                themeToggle.innerHTML = '<i class="fa fa-moon-o text-gray-600 dark:text-gray-300"></i>';
+            }
+        }
+
+        // 初始化主题
+        function initTheme() {
+            if (localStorage.getItem('theme') === 'dark' || 
+                (!localStorage.getItem('theme') && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+                document.documentElement.classList.add('dark');
+                themeToggle.innerHTML = '<i class="fa fa-sun-o text-yellow-400"></i>';
+            } else {
+                document.documentElement.classList.remove('dark');
+                themeToggle.innerHTML = '<i class="fa fa-moon-o text-gray-600 dark:text-gray-300"></i>';
+            }
+        }
+
+        // 显示信息模态框
+        function showInfoModal() {
+            infoModal.classList.remove('hidden');
+            infoModal.classList.add('flex');
+        }
+
+        // 隐藏信息模态框
+        function hideInfoModal() {
+            infoModal.classList.add('hidden');
+            infoModal.classList.remove('flex');
+        }
+
+        // 事件监听
+        chatForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const message = userInput.value.trim();
+            if (message) {
+                await sendMessage(message);
+            }
+        });
+
+        // 支持按Enter发送消息，Shift+Enter换行
+        userInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                chatForm.dispatchEvent(new Event('submit'));
+            }
+        });
+
+        themeToggle.addEventListener('click', toggleTheme);
+        infoButton.addEventListener('click', showInfoModal);
+        closeModal.addEventListener('click', hideInfoModal);
+        closeModalBtn.addEventListener('click', hideInfoModal);
+
+        // 点击模态框外部关闭
+        infoModal.addEventListener('click', (e) => {
+            if (e.target === infoModal) {
+                hideInfoModal();
+            }
+        });
+
+        // 初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            initTheme();
+            checkOllamaStatus();
+            // 定期检查服务状态
+            setInterval(checkOllamaStatus, 10000);
+        });
+    </script>
+</body>
+</html>
