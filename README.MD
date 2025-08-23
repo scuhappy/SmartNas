@@ -6,7 +6,14 @@ playwright install
 playwright install chromium
 ```
 
-## run
+## quick run
 ```
+python http_server.py
+```
+
+## use llm
+```
+curl -fsSL https://ollama.com/install.sh | sh
+ollama run qwen2:0.5b-instruct
 python http_server.py
 ```
