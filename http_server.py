@@ -9,7 +9,7 @@ def is_mobile_device(user_agent):
     return any(keyword in user_agent for keyword in mobile_keywords)
 
 # 配置
-SHARE_DIR = r"G:\\Videos"   # 你的视频目录
+SHARE_DIR = r"/media"   # 你的视频目录
 METADATA_FILE = "metadata.json"
 COVER_DIR = "covers"
 app = Flask(__name__)
@@ -79,7 +79,7 @@ DESKTOP_INDEX_TEMPLATE = """
         {% elif metadata %}
             <div class="video-item">
                 <a href="/play/{{ metadata.fanhao }}">
-                    <img src="/covers/{{ metadata.cover_path | replace('covers\\', '') | replace('covers/', '') }}" alt="{{ name }}">
+                    <img src="/covers/{{ metadata.cover_path | replace('covers\\\\', '') | replace('covers/', '') }}" alt="{{ name }}">
                 </a>
                 <p><a href="/play/{{ metadata.fanhao }}">{{ metadata.title }}</a></p>
             </div>
@@ -123,7 +123,7 @@ MOBILE_INDEX_TEMPLATE = """
         {% elif metadata %}
             <div class="video-item">
                 <a href="/play/{{ metadata.fanhao }}">
-                    <img src="/covers/{{ metadata.cover_path | replace('covers\\', '') | replace('covers/', '') }}" alt="{{ name }}">
+                    <img src="/covers/{{ metadata.cover_path | replace('covers\\\\', '') | replace('covers/', '') }}" alt="{{ name }}">
                 </a>
                 <p><a href="/play/{{ metadata.fanhao }}">{{ metadata.title }}</a></p>
             </div>
