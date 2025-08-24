@@ -166,10 +166,10 @@ async def process_videos(folder_path, cover_path, json_file="metadata.json"):
 
                 # 只处理第一个搜索结果
                 item = items[0]
-                cover_path = await download_cover(item["cover"], fanhao, filename, cover_path)
-                if cover_path:
+                downloaded_cover_path = await download_cover(item["cover"], fanhao, filename, cover_path)
+                if downloaded_cover_path:
                     # 封面路径：相对于脚本运行目录
-                    relative_cover_path = get_relative_cover_path(cover_path, base_path)
+                    relative_cover_path = get_relative_cover_path(downloaded_cover_path, base_path)
                     # 视频路径：绝对路径，规范化斜杠
                     absolute_video_path = os.path.abspath(os.path.join(root, filename)).replace(os.sep, '/')
                     metadata[fanhao] = {
