@@ -59,11 +59,31 @@ def get_file_category(file_path):
 def create_thumbnail(image_path, thumbnail_path, size=(150, 150)):
     """创建图片缩略图"""
     try:
-        os.makedirs(os.path.dirname(thumbnail_path), exist_ok=True)
+        # 确保缩略图目录存在
+        thumb_dir = os.path.dirname(thumbnail_path)
+        os.makedirs(thumb_dir, exist_ok=True)
+        
+        # 使用更安全的文件名处理
+        safe_filename = os.path.basename(thumbnail_path)
+        safe_path = os.path.join(THUMBNAIL_DIR, safe_filename)
+        
         with Image.open(image_path) as img:
             img.thumbnail(size)
-            img.save(thumbnail_path)
+            img.save(safe_path)
         return True
+    except PermissionError as e:
+        print(f"创建缩略图权限失败: {e}")
+        # 创建简化路径的缩略图
+        try:
+            safe_name = os.path.basename(image_path)
+            safe_thumb = os.path.join(THUMBNAIL_DIR, f"thumb_{safe_name}")
+            with Image.open(image_path) as img:
+                img.thumbnail(size)
+                img.save(safe_thumb)
+            return True
+        except Exception as e2:
+            print(f"创建简化缩略图失败: {e2}")
+            return False
     except Exception as e:
         print(f"创建缩略图失败: {e}")
         return False
@@ -107,13 +127,18 @@ def list_files(directory, metadata):
             elif category == 'photo':
                 # 照片类别的逻辑
                 if is_image_file(name):
-                    # 为图片创建缩略图
-                    thumbnail_path = os.path.join(THUMBNAIL_DIR, os.path.relpath(full_path, SHARE_DIR))
+                    # 为图片创建缩略图 - 使用简化路径
+                    safe_name = os.path.basename(full_path)
+                    thumbnail_filename = f"thumb_{safe_name}"
+                    thumbnail_path = os.path.join(THUMBNAIL_DIR, thumbnail_filename)
+                    
+                    # 检查缩略图是否存在，不存在则创建
                     if not os.path.exists(thumbnail_path):
                         create_thumbnail(full_path, thumbnail_path)
+                    
                     entries.append((name, is_dir, {
                         "type": "image",
-                        "thumbnail_path": thumbnail_path,
+                        "thumbnail_path": thumbnail_filename,
                         "full_path": full_path
                     }, category))
                 elif is_video_file(name):
