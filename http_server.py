@@ -706,11 +706,60 @@ def serve_thumbnail(thumb_filename):
 
 @app.route('/image/<path:filename>')
 def view_image(filename):
-    """查看大图"""
+    """查看大图，支持上一张/下一张导航"""
     image_path = filename.replace('|', '/')
     abs_path = os.path.join(SHARE_DIR, image_path)
     if not os.path.exists(abs_path):
         return "Image not found", 404
+    
+    # 获取当前目录和文件名
+    current_dir = os.path.dirname(abs_path)
+    current_file = os.path.basename(abs_path)
+    
+    # 获取当前目录中的所有图片文件
+    all_images = []
+    try:
+        for name in os.listdir(current_dir):
+            if is_image_file(name):
+                full_path = os.path.join(current_dir, name)
+                if os.path.isfile(full_path):
+                    all_images.append(name)
+        all_images.sort(key=lambda x: x.lower())
+    except PermissionError:
+        all_images = [current_file]
+    
+    # 找到当前图片的索引
+    try:
+        current_index = all_images.index(current_file)
+    except ValueError:
+        current_index = 0
+    
+    # 计算上一张和下一张
+    prev_file = all_images[current_index - 1] if current_index > 0 else None
+    next_file = all_images[current_index + 1] if current_index < len(all_images) - 1 else None
+    
+    # 构建正确的路径 - 简化和调试
+    relative_path = os.path.relpath(current_dir, SHARE_DIR)
+    if relative_path == '.':
+        encoded_path = ''
+    else:
+        encoded_path = relative_path.replace('/', '|')
+    
+    def build_image_url(filename):
+        if encoded_path:
+            return f"/image/{encoded_path}|{filename}"
+        else:
+            return f"/image/{filename}"
+    
+    prev_url = build_image_url(prev_file) if prev_file else None
+    next_url = build_image_url(next_file) if next_file else None
+    
+    # 调试信息
+    print(f"DEBUG: Current file: {current_file}")
+    print(f"DEBUG: All images: {all_images}")
+    print(f"DEBUG: Current index: {current_index}")
+    print(f"DEBUG: Prev file: {prev_file}, URL: {prev_url}")
+    print(f"DEBUG: Next file: {next_file}, URL: {next_url}")
     
     user_agent = request.user_agent.string
     is_mobile = is_mobile_device(user_agent)
@@ -722,18 +771,74 @@ def view_image(filename):
     <title>查看图片 - {{ name }}</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; text-align: center; background: #000; }
-        img { max-width: 100%; max-height: 100vh; margin: 20px auto; display: block; }
-        .back-button { position: fixed; top: 10px; left: 10px; padding: 8px 15px; background-color: rgba(0,0,0,0.7); color: white; text-decoration: none; border-radius: 4px; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #000; color: white; min-height: 100vh; }
+        .container { position: relative; height: 100vh; display: flex; align-items: center; justify-content: center; }
+        img { max-width: 95%; max-height: 95vh; object-fit: contain; border-radius: 5px; }
+        .nav-button {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 15px 25px;
+            background-color: rgba(76, 175, 80, 0.9);
+            color: white;
+            text-decoration: none;
+            border-radius: 50%;
+            font-size: 24px;
+            font-weight: bold;
+            z-index: 1000;
+            cursor: pointer;
+            border: none;
+        }
+        .prev-button { left: 20px; }
+        .next-button { right: 20px; }
+        .back-button {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            padding: 10px 20px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            z-index: 1001;
+        }
+        .counter {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 20px;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            border-radius: 5px;
+            z-index: 1001;
+        }
     </style>
 </head>
 <body>
     <a href="javascript:history.back()" class="back-button">返回</a>
-    <img src="/raw_image/{{ filename | replace('/', '|') }}" alt="{{ name }}">
+    <div class="counter">{{ current_index + 1 }} / {{ total_images }}</div>
+    
+    <div class="container">
+        {% if prev_url %}
+            <a href="{{ prev_url }}" class="nav-button prev-button">‹</a>
+        {% endif %}
+        
+        <img src="/raw_image/{{ filename | replace('/', '|') }}" alt="{{ name }}">
+        
+        {% if next_url %}
+            <a href="{{ next_url }}" class="nav-button next-button">›</a>
+        {% endif %}
+    </div>
 </body>
 </html>
     """
-    return render_template_string(template, filename=filename, name=os.path.basename(abs_path))
+    return render_template_string(
+        template, 
+        filename=filename, 
+        name=os.path.basename(abs_path),
+        current_index=current_index,
+        total_images=len(all_images)
+    )
 
 @app.route('/raw_image/<path:filename>')
 def serve_raw_image(filename):
