@@ -1,0 +1,20 @@
+{
+    "user_info":{
+        "name":"yorkchen"
+    },
+    "resources":{
+        "learning_materials":{
+            "paths":[
+                "/media/yorkchen/VideoA",
+                "/media/yorkchen/VideoB"
+            ],
+            "category":"av"
+        },
+        "photos":{
+            "paths":[
+                "/media/yorkchen/YORK"
+            ],
+            "category":"photo"
+        }
+    }
+}
