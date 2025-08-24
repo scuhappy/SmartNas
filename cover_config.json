@@ -1,0 +1,8 @@
+{
+    "video_paths": [
+        "/media/yorkchen/VideoA",
+        "/media/yorkchen/VideoB"
+    ],
+    "cover_path": "./covers",
+    "meta_config": "metadata.json"
+}

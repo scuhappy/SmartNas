@@ -7,6 +7,22 @@ from urllib.parse import quote
 from playwright.async_api import async_playwright
 from bs4 import BeautifulSoup
 
+# 读取配置文件
+def load_config():
+    """读取cover_config.json配置文件"""
+    try:
+        with open('cover_config.json', 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except FileNotFoundError:
+        print("❌ cover_config.json 文件未找到，使用默认配置")
+        return {
+            "video_paths": ["/media"],
+            "cover_path": "./covers",
+            "meta_config": "metadata.json"
+        }
+
+# 加载配置
+CONFIG = load_config()
 BASE_URL = "https://javday.app"
 
 async def search_javday(fanhao: str):
@@ -56,7 +72,7 @@ async def search_javday(fanhao: str):
 
     return results
 
-async def download_cover(url, fanhao, filename, save_dir="covers", retries=3):
+async def download_cover(url, fanhao, filename, save_dir, retries=3):
     """下载封面并以视频文件名命名，支持重试和备用下载"""
     os.makedirs(save_dir, exist_ok=True)
     save_name = os.path.splitext(filename)[0]
@@ -122,7 +138,7 @@ def get_relative_cover_path(cover_path, base_path):
         print(f"⚠ 跨分区路径: {cover_path} (基于 {base_path})")
         return os.path.abspath(cover_path).replace(os.sep, '/')
 
-async def process_videos(folder_path, json_file="metadata.json"):
+async def process_videos(folder_path, cover_path, json_file="metadata.json"):
     """递归遍历文件夹及其子文件夹，提取番号，下载封面并保存元数据"""
     video_extensions = ('.mp4', '.mkv', '.avi', '.mov', '.wmv')
     metadata = load_existing_metadata(json_file)
@@ -150,7 +166,7 @@ async def process_videos(folder_path, json_file="metadata.json"):
 
                 # 只处理第一个搜索结果
                 item = items[0]
-                cover_path = await download_cover(item["cover"], fanhao, filename)
+                cover_path = await download_cover(item["cover"], fanhao, filename, cover_path)
                 if cover_path:
                     # 封面路径：相对于脚本运行目录
                     relative_cover_path = get_relative_cover_path(cover_path, base_path)
@@ -185,13 +201,31 @@ def load_existing_metadata(json_file):
         return {}
 
 async def main():
-    # 指定视频文件夹路径
-    folder_path = "/media"  # 请替换为你的视频文件夹路径
-    if not os.path.exists(folder_path):
-        print(f"❌ 文件夹 {folder_path} 不存在")
-        return
-
-    await process_videos(folder_path)
+    """主函数，使用配置文件中的路径"""
+    video_paths = CONFIG.get("video_paths", ["/media"])
+    cover_path = CONFIG.get("cover_path", "./covers")
+    meta_config = CONFIG.get("meta_config", "metadata.json")
+    
+    # 确保封面目录存在
+    os.makedirs(cover_path, exist_ok=True)
+    
+    print(f"📁 视频路径: {video_paths}")
+    print(f"📁 封面保存路径: {cover_path}")
+    print(f"📁 元数据文件: {meta_config}")
+    
+    total_processed = 0
+    
+    # 处理所有视频路径
+    for video_path in video_paths:
+        if not os.path.exists(video_path):
+            print(f"❌ 视频路径不存在: {video_path}")
+            continue
+            
+        print(f"🔄 开始处理路径: {video_path}")
+        await process_videos(video_path, cover_path, meta_config)
+        total_processed += 1
+    
+    print(f"✅ 所有路径处理完成，共处理 {total_processed} 个路径")
 
 if __name__ == "__main__":
     asyncio.run(main())
