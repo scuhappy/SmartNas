@@ -55,38 +55,8 @@ def get_file_category(file_path):
                 return category
     return 'av'  # 默认类别
 
-# 创建缩略图
-def create_thumbnail(image_path, thumbnail_path, size=(150, 150)):
-    """创建图片缩略图"""
-    try:
-        # 确保缩略图目录存在
-        thumb_dir = os.path.dirname(thumbnail_path)
-        os.makedirs(thumb_dir, exist_ok=True)
-        
-        # 使用更安全的文件名处理
-        safe_filename = os.path.basename(thumbnail_path)
-        safe_path = os.path.join(THUMBNAIL_DIR, safe_filename)
-        
-        with Image.open(image_path) as img:
-            img.thumbnail(size)
-            img.save(safe_path)
-        return True
-    except PermissionError as e:
-        print(f"创建缩略图权限失败: {e}")
-        # 创建简化路径的缩略图
-        try:
-            safe_name = os.path.basename(image_path)
-            safe_thumb = os.path.join(THUMBNAIL_DIR, f"thumb_{safe_name}")
-            with Image.open(image_path) as img:
-                img.thumbnail(size)
-                img.save(safe_thumb)
-            return True
-        except Exception as e2:
-            print(f"创建简化缩略图失败: {e2}")
-            return False
-    except Exception as e:
-        print(f"创建缩略图失败: {e}")
-        return False
+# 移除缩略图创建功能，直接使用原图
+# 缩略图功能已被移除，改为直接使用原图显示小尺寸
 
 # 检查是否为图片文件
 def is_image_file(filename):
@@ -127,19 +97,12 @@ def list_files(directory, metadata):
             elif category == 'photo':
                 # 照片类别的逻辑
                 if is_image_file(name):
-                    # 为图片创建缩略图 - 使用简化路径
-                    safe_name = os.path.basename(full_path)
-                    thumbnail_filename = f"thumb_{safe_name}"
-                    thumbnail_path = os.path.join(THUMBNAIL_DIR, thumbnail_filename)
-                    
-                    # 检查缩略图是否存在，不存在则创建
-                    if not os.path.exists(thumbnail_path):
-                        create_thumbnail(full_path, thumbnail_path)
+                    # 直接使用原图，无需缩略图
+                    abs_full_path = os.path.abspath(full_path)
                     
                     entries.append((name, is_dir, {
                         "type": "image",
-                        "thumbnail_path": thumbnail_filename,
-                        "full_path": full_path
+                        "full_path": abs_full_path
                     }, category))
                 elif is_video_file(name):
                     # 照片类别中的视频文件
@@ -180,11 +143,11 @@ DESKTOP_INDEX_TEMPLATE = """
         .video-item img { width: 100%; height: auto; cursor: pointer; }
         .video-item p { margin: 5px 0; word-wrap: break-word; }
         .photo-item { width: 150px; text-align: center; }
-        .photo-item img { width: 100%; height: 150px; object-fit: cover; cursor: pointer; }
-        .dir-item { margin: 10px 0; }
-        .file-item { margin: 10px 0; }
-        .breadcrumb { margin-bottom: 20px; }
-        .breadcrumb a { margin: 0 5px; }
+         .photo-item img { width: 100%; height: 150px; object-fit: cover; cursor: pointer; }
+         .dir-item { margin: 10px 0; }
+         .file-item { margin: 10px 0; }
+         .breadcrumb { margin-bottom: 20px; }
+         .breadcrumb a { margin: 0 5px; }
     </style>
 </head>
 <body>
@@ -210,12 +173,12 @@ DESKTOP_INDEX_TEMPLATE = """
                 <p><a href="/play/{{ metadata.fanhao }}">{{ metadata.title }}</a></p>
             </div>
         {% elif category == 'photo' and metadata and metadata.type == 'image' %}
-            <div class="photo-item">
-                <a href="/image/{{ metadata.full_path | replace('/', '|') }}">
-                    <img src="/thumbnails/{{ metadata.thumbnail_path | replace('/', '|') }}" alt="{{ name }}">
-                </a>
-                <p>{{ name }}</p>
-            </div>
+             <div class="photo-item">
+                 <a href="/image/{{ metadata.full_path | replace('/', '|') }}">
+                     <img src="/raw_image/{{ metadata.full_path | replace('/', '|') }}" alt="{{ name }}">
+                 </a>
+                 <p>{{ name }}</p>
+             </div>
         {% elif category == 'photo' and metadata and metadata.type == 'video' %}
             <div class="file-item">
                 🎬 <a href="/play_video/{{ metadata.video_path | replace('/', '|') }}">{{ name }}</a>
@@ -281,12 +244,12 @@ MOBILE_INDEX_TEMPLATE = """
                 <p><a href="/play/{{ metadata.fanhao }}">{{ metadata.title }}</a></p>
             </div>
         {% elif category == 'photo' and metadata and metadata.type == 'image' %}
-            <div class="photo-item">
-                <a href="/image/{{ metadata.full_path | replace('/', '|') }}">
-                    <img src="/thumbnails/{{ metadata.thumbnail_path | replace('/', '|') }}" alt="{{ name }}">
-                </a>
-                <p style="font-size: 0.8em;">{{ name }}</p>
-            </div>
+             <div class="photo-item">
+                 <a href="/image/{{ metadata.full_path | replace('/', '|') }}">
+                     <img src="/raw_image/{{ metadata.full_path | replace('/', '|') }}" alt="{{ name }}">
+                 </a>
+                 <p style="font-size: 0.8em;">{{ name }}</p>
+             </div>
         {% elif category == 'photo' and metadata and metadata.type == 'video' %}
             <div class="file-item">
                 🎬 <a href="/play_video/{{ metadata.video_path | replace('/', '|') }}">{{ name }}</a>
@@ -436,15 +399,6 @@ def serve_video(fanhao):
 def serve_cover(filename):
     return send_from_directory(COVER_DIR, filename)
 
-@app.route('/thumbnails/<path:filename>')
-def serve_thumbnail(filename):
-    """提供缩略图"""
-    thumbnail_path = filename.replace('|', '/')
-    abs_path = os.path.join(THUMBNAIL_DIR, thumbnail_path)
-    if not os.path.exists(abs_path):
-        return "Thumbnail not found", 404
-    return send_from_directory(THUMBNAIL_DIR, thumbnail_path)
-
 @app.route('/image/<path:filename>')
 def view_image(filename):
     """查看大图"""
@@ -532,6 +486,5 @@ def serve_raw_video(filename):
 if __name__ == '__main__':
     os.makedirs(SHARE_DIR, exist_ok=True)
     os.makedirs(COVER_DIR, exist_ok=True)
-    os.makedirs(THUMBNAIL_DIR, exist_ok=True)
     print(f"Serving at http://0.0.0.0:5000")
     app.run(host='0.0.0.0', port=5000, debug=True)
