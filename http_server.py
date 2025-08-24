@@ -96,16 +96,17 @@ def is_video_file(filename):
     return any(filename.lower().endswith(ext) for ext in video_extensions)
 
 # 遍历目录
-def list_files(directory, metadata):
+def list_files(directory, metadata, page=1, per_page=50):
     entries = []
     category = get_file_category(directory)
     
+    all_items = []
     for name in os.listdir(directory):
         full_path = os.path.join(directory, name)
         is_dir = os.path.isdir(full_path)
         
         if is_dir:
-            entries.append((name, is_dir, None, category))
+            all_items.append((name, is_dir, None, category))
         else:
             if category == 'av':
                 # AV类别的原有逻辑
@@ -118,31 +119,38 @@ def list_files(directory, metadata):
                         "cover_path": metadata[fanhao].get("cover_path", f"{fanhao}.jpg"),
                         "video_path": full_path
                     }
-                entries.append((name, is_dir, file_metadata, category))
+                all_items.append((name, is_dir, file_metadata, category))
             elif category == 'photo':
                 # 照片类别的逻辑
                 if is_image_file(name):
                     # 直接使用原图，无需缩略图
                     abs_full_path = os.path.abspath(full_path)
                     
-                    entries.append((name, is_dir, {
+                    all_items.append((name, is_dir, {
                         "type": "image",
                         "full_path": abs_full_path
                     }, category))
                 elif is_video_file(name):
                     # 照片类别中的视频文件
-                    entries.append((name, is_dir, {
+                    all_items.append((name, is_dir, {
                         "type": "video",
                         "video_path": full_path
                     }, category))
                 else:
                     # 其他文件
-                    entries.append((name, is_dir, None, category))
+                    all_items.append((name, is_dir, None, category))
             else:
                 # 其他类别
-                entries.append((name, is_dir, None, category))
+                all_items.append((name, is_dir, None, category))
     
-    return entries
+    # 分页处理
+    total_items = len(all_items)
+    start_index = (page - 1) * per_page
+    end_index = start_index + per_page
+    entries = all_items[start_index:end_index]
+    
+    total_pages = (total_items + per_page - 1) // per_page
+    return entries, total_items, total_pages
 
 # 构建面包屑导航
 def build_breadcrumb(req_path):
