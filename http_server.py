@@ -433,11 +433,26 @@ def view_image(filename):
 @app.route('/raw_image/<path:filename>')
 def serve_raw_image(filename):
     """提供原始图片"""
-    image_path = filename.replace('|', '/')
-    abs_path = os.path.join(SHARE_DIR, image_path)
-    if not os.path.exists(abs_path):
-        return "Image not found", 404
-    return send_from_directory(SHARE_DIR, image_path)
+    try:
+        # 解码路径：将|替换回/
+        decoded_path = filename.replace('|', '/')
+        
+        # 确保路径在SHARE_DIR范围内，防止目录遍历攻击
+        abs_path = os.path.abspath(os.path.join(SHARE_DIR, decoded_path.lstrip('/')))
+        share_dir_abs = os.path.abspath(SHARE_DIR)
+        
+        if not abs_path.startswith(share_dir_abs):
+            return "Invalid path", 403
+            
+        if not os.path.exists(abs_path):
+            return f"Image not found: {decoded_path}", 404
+            
+        if not os.path.isfile(abs_path):
+            return "Path is not a file", 404
+            
+        return send_from_directory(os.path.dirname(abs_path), os.path.basename(abs_path))
+    except Exception as e:
+        return f"Error serving image: {str(e)}", 500
 
 @app.route('/play_video/<path:filename>')
 def play_video_file(filename):
@@ -477,11 +492,26 @@ def play_video_file(filename):
 @app.route('/raw_video/<path:filename>')
 def serve_raw_video(filename):
     """提供原始视频"""
-    video_path = filename.replace('|', '/')
-    abs_path = os.path.join(SHARE_DIR, video_path)
-    if not os.path.exists(abs_path):
-        return "Video not found", 404
-    return send_from_directory(SHARE_DIR, video_path)
+    try:
+        # 解码路径：将|替换回/
+        decoded_path = filename.replace('|', '/')
+        
+        # 确保路径在SHARE_DIR范围内，防止目录遍历攻击
+        abs_path = os.path.abspath(os.path.join(SHARE_DIR, decoded_path.lstrip('/')))
+        share_dir_abs = os.path.abspath(SHARE_DIR)
+        
+        if not abs_path.startswith(share_dir_abs):
+            return "Invalid path", 403
+            
+        if not os.path.exists(abs_path):
+            return f"Video not found: {decoded_path}", 404
+            
+        if not os.path.isfile(abs_path):
+            return "Path is not a file", 404
+            
+        return send_from_directory(os.path.dirname(abs_path), os.path.basename(abs_path))
+    except Exception as e:
+        return f"Error serving video: {str(e)}", 500
 
 if __name__ == '__main__':
     os.makedirs(SHARE_DIR, exist_ok=True)
