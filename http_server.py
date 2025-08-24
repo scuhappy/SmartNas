@@ -22,11 +22,36 @@ config = load_config()
 USER_NAME = config.get('user_info', {}).get('name', 'User')
 RESOURCES = config.get('resources', {})
 
+# 从config.json读取缩略图配置
+def load_thumbnail_config():
+    """从config.json加载缩略图配置"""
+    config_data = load_config()
+    resources = config_data.get('resources', {})
+    
+    # 查找photo类别的配置
+    for resource_name, resource_info in resources.items():
+        if resource_info.get('category') == 'photo':
+            return {
+                'size': float(resource_info.get('thumbnail_size', 0.2)),
+                'path': resource_info.get('thumbnail_path', './thumbnails'),
+                'per_page': 50  # 默认分页大小
+            }
+    
+    # 如果没有找到photo类别，返回默认配置
+    return {
+        'size': 0.2,
+        'path': './thumbnails',
+        'per_page': 50
+    }
+
+# 加载缩略图配置
+THUMBNAIL_CONFIG = load_thumbnail_config()
+
 # 原始配置
 SHARE_DIR = r"/"   # 你的视频目录
 METADATA_FILE = "metadata.json"
 COVER_DIR = "covers"
-THUMBNAIL_DIR = "thumbnails"
+THUMBNAIL_DIR = THUMBNAIL_CONFIG['path']
 app = Flask(__name__)
 
 # 加载元数据
@@ -292,6 +317,239 @@ DESKTOP_PLAYER_TEMPLATE = """
 </html>
 """
 
+# HTML 模板 - 照片类别(电脑端)
+DESKTOP_PHOTO_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ user_name }} SmartNas - {{ path }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .header { text-align: center; margin-bottom: 30px; }
+        .controls { margin: 20px 0; text-align: center; }
+        .controls select { padding: 5px; margin: 0 10px; }
+        .pagination { margin: 20px 0; text-align: center; }
+        .pagination a { margin: 0 5px; padding: 5px 10px; text-decoration: none; border: 1px solid #ddd; }
+        .pagination .current { background-color: #4CAF50; color: white; }
+        .pagination .disabled { color: #ccc; }
+        .photo-grid { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; }
+        .photo-item { width: 200px; text-align: center; }
+        .photo-item img { width: 100%; height: 150px; object-fit: cover; cursor: pointer; border-radius: 5px; }
+        .photo-item p { margin: 5px 0; font-size: 0.9em; word-wrap: break-word; }
+        .dir-item { margin: 10px 0; padding: 10px; background-color: #f0f0f0; border-radius: 4px; }
+        .dir-item a { text-decoration: none; color: #333; }
+        .file-item { margin: 10px 0; padding: 10px; background-color: #f9f9f9; border-radius: 4px; }
+        .breadcrumb { margin-bottom: 20px; }
+        .breadcrumb a { margin: 0 5px; }
+        .info { text-align: center; margin: 10px 0; color: #666; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ user_name }} SmartNas</h1>
+        <div class="breadcrumb">
+            当前位置: <a href="/">首页</a>
+            {% for part, url in breadcrumb %}
+                / <a href="{{ url }}">{{ part }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if path != '/' %}
+        <a href="/" class="back-button">返回首页</a>
+    {% endif %}
+
+    <div class="controls">
+        <label>每页显示: 
+            <select onchange="changePerPage(this.value)">
+                {% for size in valid_per_page %}
+                    <option value="{{ size }}" {% if size == per_page %}selected{% endif %}>{{ size }}张</option>
+                {% endfor %}
+            </select>
+        </label>
+    </div>
+
+    <div class="info">
+        共 {{ total_items }} 项，第 {{ current_page }} / {{ total_pages }} 页
+    </div>
+
+    <div class="photo-grid">
+    {% for name, is_dir, metadata, category in files %}
+        {% if is_dir %}
+            <div class="dir-item">📁 <a href="{{ path }}{{ name }}/">{{ name }}</a></div>
+        {% elif category == 'photo' and metadata and metadata.type == 'image' %}
+            <div class="photo-item">
+                <a href="/image/{{ metadata.full_path | replace('/', '|') }}">
+                    {% if metadata.thumbnail %}
+                        <img src="/thumbnails/{{ metadata.thumbnail }}" alt="{{ name }}">
+                    {% else %}
+                        <img src="/raw_image/{{ metadata.full_path | replace('/', '|') }}" alt="{{ name }}" style="width: 100%; height: 150px; object-fit: cover;">
+                    {% endif %}
+                </a>
+                <p>{{ name }}</p>
+            </div>
+        {% elif category == 'photo' and metadata and metadata.type == 'video' %}
+            <div class="file-item">
+                🎬 <a href="/play_video/{{ metadata.video_path | replace('/', '|') }}">{{ name }}</a>
+            </div>
+        {% else %}
+            <div class="file-item">📄 <a href="{{ path }}{{ name }}">{{ name }}</a></div>
+        {% endif %}
+    {% endfor %}
+    </div>
+
+    <div class="pagination">
+        {% if current_page > 1 %}
+            <a href="{{ path }}?page={{ current_page - 1 }}{% if per_page != 50 %}&per_page={{ per_page }}{% endif %}">上一页</a>
+        {% else %}
+            <span class="disabled">上一页</span>
+        {% endif %}
+
+        {% for p in range(1, total_pages + 1) %}
+            {% if p == current_page %}
+                <span class="current">{{ p }}</span>
+            {% elif p == 1 or p == total_pages or (p >= current_page - 2 and p <= current_page + 2) %}
+                <a href="{{ path }}?page={{ p }}{% if per_page != 50 %}&per_page={{ per_page }}{% endif %}">{{ p }}</a>
+            {% elif p == current_page - 3 or p == current_page + 3 %}
+                <span>...</span>
+            {% endif %}
+        {% endfor %}
+
+        {% if current_page < total_pages %}
+            <a href="{{ path }}?page={{ current_page + 1 }}{% if per_page != 50 %}&per_page={{ per_page }}{% endif %}">下一页</a>
+        {% else %}
+            <span class="disabled">下一页</span>
+        {% endif %}
+    </div>
+
+    <script>
+        function changePerPage(size) {
+            const url = new URL(window.location);
+            url.searchParams.set('per_page', size);
+            url.searchParams.set('page', 1);
+            window.location = url;
+        }
+    </script>
+</body>
+</html>
+"""
+
+# HTML 模板 - 照片类别(手机端)
+MOBILE_PHOTO_TEMPLATE = """
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ user_name }} SmartNas - {{ path }}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 10px; padding: 0; }
+        .header { text-align: center; margin-bottom: 20px; }
+        .controls { margin: 15px 0; text-align: center; }
+        .controls select { padding: 8px; margin: 0 5px; }
+        .pagination { margin: 15px 0; text-align: center; }
+        .pagination a { margin: 0 3px; padding: 8px 12px; text-decoration: none; border: 1px solid #ddd; font-size: 0.9em; }
+        .pagination .current { background-color: #4CAF50; color: white; }
+        .pagination .disabled { color: #ccc; }
+        .photo-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+        .photo-item { width: 120px; text-align: center; }
+        .photo-item img { width: 100%; height: 100px; object-fit: cover; cursor: pointer; border-radius: 5px; }
+        .photo-item p { margin: 3px 0; font-size: 0.8em; word-wrap: break-word; }
+        .dir-item { margin: 8px 0; padding: 8px; background-color: #f0f0f0; border-radius: 4px; }
+        .dir-item a { text-decoration: none; color: #333; }
+        .file-item { margin: 8px 0; padding: 8px; background-color: #f9f9f9; border-radius: 4px; }
+        .breadcrumb { margin-bottom: 15px; font-size: 0.9em; }
+        .breadcrumb a { margin: 0 3px; }
+        .info { text-align: center; margin: 10px 0; color: #666; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>{{ user_name }} SmartNas</h1>
+        <div class="breadcrumb">
+            当前位置: <a href="/">首页</a>
+            {% for part, url in breadcrumb %}
+                / <a href="{{ url }}">{{ part }}</a>
+            {% endfor %}
+        </div>
+    </div>
+
+    {% if path != '/' %}
+        <a href="/" class="back-button">返回首页</a>
+    {% endif %}
+
+    <div class="controls">
+        <label>每页: 
+            <select onchange="changePerPage(this.value)">
+                {% for size in valid_per_page %}
+                    <option value="{{ size }}" {% if size == per_page %}selected{% endif %}>{{ size }}</option>
+                {% endfor %}
+            </select>
+        </label>
+    </div>
+
+    <div class="info">
+        {{ total_items }} 项 {{ current_page }}/{{ total_pages }}
+    </div>
+
+    <div class="photo-grid">
+    {% for name, is_dir, metadata, category in files %}
+        {% if is_dir %}
+            <div class="dir-item">📁 <a href="{{ path }}{{ name }}/">{{ name }}</a></div>
+        {% elif category == 'photo' and metadata and metadata.type == 'image' %}
+            <div class="photo-item">
+                <a href="/image/{{ metadata.full_path | replace('/', '|') }}">
+                    {% if metadata.thumbnail %}
+                        <img src="/thumbnails/{{ metadata.thumbnail }}" alt="{{ name }}">
+                    {% else %}
+                        <img src="/raw_image/{{ metadata.full_path | replace('/', '|') }}" alt="{{ name }}" style="width: 100%; height: 100px; object-fit: cover;">
+                    {% endif %}
+                </a>
+                <p>{{ name[:15] }}{% if name|length > 15 %}...{% endif %}</p>
+            </div>
+        {% elif category == 'photo' and metadata and metadata.type == 'video' %}
+            <div class="file-item">
+                🎬 <a href="/play_video/{{ metadata.video_path | replace('/', '|') }}">{{ name }}</a>
+            </div>
+        {% else %}
+            <div class="file-item">📄 <a href="{{ path }}{{ name }}">{{ name }}</a></div>
+        {% endif %}
+    {% endfor %}
+    </div>
+
+    <div class="pagination">
+        {% if current_page > 1 %}
+            <a href="{{ path }}?page={{ current_page - 1 }}{% if per_page != 50 %}&per_page={{ per_page }}{% endif %}">‹</a>
+        {% else %}
+            <span class="disabled">‹</span>
+        {% endif %}
+
+        {% for p in range(1, total_pages + 1) %}
+            {% if p == current_page %}
+                <span class="current">{{ p }}</span>
+            {% elif p <= 3 or p >= total_pages - 2 or (p >= current_page - 1 and p <= current_page + 1) %}
+                <a href="{{ path }}?page={{ p }}{% if per_page != 50 %}&per_page={{ per_page }}{% endif %}">{{ p }}</a>
+            {% endif %}
+        {% endfor %}
+
+        {% if current_page < total_pages %}
+            <a href="{{ path }}?page={{ current_page + 1 }}{% if per_page != 50 %}&per_page={{ per_page }}{% endif %}">›</a>
+        {% else %}
+            <span class="disabled">›</span>
+        {% endif %}
+    </div>
+
+    <script>
+        function changePerPage(size) {
+            const url = new URL(window.location);
+            url.searchParams.set('per_page', size);
+            url.searchParams.set('page', 1);
+            window.location = url;
+        }
+    </script>
+</body>
+</html>
+"""
+
 # HTML 模板 - 播放页(手机端)
 MOBILE_PLAYER_TEMPLATE = """
 <!DOCTYPE html>
@@ -333,30 +591,58 @@ def dir_listing(req_path):
     if os.path.isfile(abs_path):
         return send_from_directory(SHARE_DIR, req_path)
 
+    # 获取分页参数
+    try:
+        page = int(request.args.get('page', 1))
+        per_page = int(request.args.get('per_page', THUMBNAIL_CONFIG['per_page']))
+        # 验证per_page选项
+        valid_per_page = [20, 50, 100, 200]
+        if per_page not in valid_per_page:
+            per_page = THUMBNAIL_CONFIG['per_page']
+    except ValueError:
+        page = 1
+        per_page = THUMBNAIL_CONFIG['per_page']
+
     metadata = load_metadata()
-    files = list_files(abs_path, metadata)
+    files, total_items, total_pages = list_files(abs_path, metadata, page, per_page)
     breadcrumb = build_breadcrumb(req_path)
+    category = get_file_category(abs_path)
 
     # 检测设备类型
     user_agent = request.user_agent.string
     is_mobile = is_mobile_device(user_agent)
 
-    if is_mobile:
-        return render_template_string(
-            MOBILE_INDEX_TEMPLATE,
-            files=files,
-            path=f'/{req_path}' if req_path else '/',
-            breadcrumb=breadcrumb,
-            user_name=USER_NAME
-        )
+    # 构建分页URL参数
+    base_url = f'/{req_path}' if req_path else '/'
+    query_params = []
+    if per_page != THUMBNAIL_CONFIG['per_page']:
+        query_params.append(f'per_page={per_page}')
+
+    # 选择模板
+    if category == 'photo':
+        if is_mobile:
+            template = MOBILE_PHOTO_TEMPLATE
+        else:
+            template = DESKTOP_PHOTO_TEMPLATE
     else:
-        return render_template_string(
-            DESKTOP_INDEX_TEMPLATE,
-            files=files,
-            path=f'/{req_path}' if req_path else '/',
-            breadcrumb=breadcrumb,
-            user_name=USER_NAME
-        )
+        if is_mobile:
+            template = MOBILE_INDEX_TEMPLATE
+        else:
+            template = DESKTOP_INDEX_TEMPLATE
+
+    return render_template_string(
+        template,
+        files=files,
+        path=base_url,
+        breadcrumb=breadcrumb,
+        user_name=USER_NAME,
+        current_page=page,
+        total_pages=total_pages,
+        total_items=total_items,
+        per_page=per_page,
+        valid_per_page=[20, 50, 100, 200],
+        category=category
+    )
 
 @app.route('/play/<fanhao>')
 def play_video(fanhao):
@@ -398,6 +684,17 @@ def serve_video(fanhao):
 @app.route('/covers/<path:filename>')
 def serve_cover(filename):
     return send_from_directory(COVER_DIR, filename)
+
+@app.route('/thumbnails/<thumb_filename>')
+def serve_thumbnail(thumb_filename):
+    """提供缩略图"""
+    try:
+        thumb_path = os.path.join(THUMBNAIL_CONFIG['path'], f"{thumb_filename}.jpg")
+        if not os.path.exists(thumb_path):
+            return "Thumbnail not found", 404
+        return send_from_directory(THUMBNAIL_CONFIG['path'], f"{thumb_filename}.jpg")
+    except Exception as e:
+        return f"Error serving thumbnail: {str(e)}", 500
 
 @app.route('/image/<path:filename>')
 def view_image(filename):
@@ -516,5 +813,9 @@ def serve_raw_video(filename):
 if __name__ == '__main__':
     os.makedirs(SHARE_DIR, exist_ok=True)
     os.makedirs(COVER_DIR, exist_ok=True)
+    thumbnail_path = THUMBNAIL_CONFIG.get('path', './thumbnails')
+    os.makedirs(thumbnail_path, exist_ok=True)
     print(f"Serving at http://0.0.0.0:5000")
+    print(f"Thumbnail size: {THUMBNAIL_CONFIG.get('size', 0.2)}")
+    print(f"Thumbnail path: {thumbnail_path}")
     app.run(host='0.0.0.0', port=5000, debug=True)

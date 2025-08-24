@@ -14,7 +14,9 @@
             "paths":[
                 "/media/yorkchen/YORK"
             ],
-            "category":"photo"
+            "category":"photo",
+            "thumbnail_size": "0.2",
+            "thumbnail_path": "./thumbnails"
         }
     }
 }
