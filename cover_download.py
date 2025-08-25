@@ -138,6 +138,20 @@ def get_relative_cover_path(cover_path, base_path):
         print(f"⚠ 跨分区路径: {cover_path} (基于 {base_path})")
         return os.path.abspath(cover_path).replace(os.sep, '/')
 
+def extract_actor_name(title):
+    """从标题中提取演员名字，取最后一个空格字符后面的内容"""
+    if not title:
+        return None
+    
+    # 查找最后一个空格
+    last_space_index = title.rfind(' ')
+    if last_space_index == -1:
+        return None
+    
+    # 提取最后一个空格后的内容作为演员名字
+    actor_name = title[last_space_index + 1:].strip()
+    return actor_name if actor_name else None
+
 async def process_videos(folder_path, cover_path, json_file="metadata.json"):
     """递归遍历文件夹及其子文件夹，提取番号，下载封面并保存元数据"""
     video_extensions = ('.mp4', '.mkv', '.avi', '.mov', '.wmv')
@@ -172,10 +186,13 @@ async def process_videos(folder_path, cover_path, json_file="metadata.json"):
                     relative_cover_path = get_relative_cover_path(downloaded_cover_path, base_path)
                     # 视频路径：绝对路径，规范化斜杠
                     absolute_video_path = os.path.abspath(os.path.join(root, filename)).replace(os.sep, '/')
+                    # 提取演员名字
+                    actor_name = extract_actor_name(item["title"])
                     metadata[fanhao] = {
                         "title": item["title"],
                         "cover_path": relative_cover_path,
-                        "video_file": absolute_video_path
+                        "video_file": absolute_video_path,
+                        "actor_name": actor_name
                     }
                     record_count += 1
 
