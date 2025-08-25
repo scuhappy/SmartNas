@@ -47,8 +47,8 @@ def load_thumbnail_config():
 # 加载缩略图配置
 THUMBNAIL_CONFIG = load_thumbnail_config()
 
-# 原始配置
-SHARE_DIR = r"/"   # 你的视频目录
+# 从config中读取配置
+SHARE_DIR = config.get('server_info', {}).get('home_path', r"/")   # 从配置文件读取首页路径
 METADATA_FILE = "metadata.json"
 COVER_DIR = "covers"
 THUMBNAIL_DIR = THUMBNAIL_CONFIG['path']
